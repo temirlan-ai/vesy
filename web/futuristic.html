@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Визуализатор CoP — live</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: radial-gradient(120% 90% at 50% 0%, #0a1622 0%, #060b12 55%, #04070c 100%); }
+  .mono { font-family: 'Share Tech Mono', monospace; }
+
+  .root {
+    position: relative; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    padding: 34px; overflow: hidden;
+    background: radial-gradient(120% 90% at 50% 0%, #0a1622 0%, #060b12 55%, #04070c 100%);
+    font-family: 'Rajdhani', sans-serif; color: var(--ink);
+  }
+  .scanlines { position: absolute; inset: 0; pointer-events: none; z-index: 5;
+    background: repeating-linear-gradient(0deg, transparent 0 3px, rgba(0,0,0,.16) 3px 4px);
+    mix-blend-mode: overlay; opacity: .5; }
+  .vignette { position: absolute; inset: 0; pointer-events: none; z-index: 4;
+    background: radial-gradient(140% 120% at 50% 0%, transparent 55%, rgba(0,0,0,.55) 100%); }
+  .container { position: relative; z-index: 6; width: 1480px; max-width: 100%; min-width: 1000px; }
+
+  .body-grid { display: grid;
+    grid-template-columns: minmax(220px,300px) minmax(0,1fr) minmax(248px,336px);
+    gap: 22px; align-items: stretch; }
+  .left, .right { display: flex; flex-direction: column; gap: 18px; }
+  main { min-width: 460px; }
+
+  .panel { background: rgba(9,17,26,.72);
+    border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+    border-radius: 5px; padding: 20px; }
+  .label { font-size: 12px; letter-spacing: .2em; text-transform: uppercase; color: var(--ink-dim); }
+  .chip { display: flex; align-items: center; gap: 7px; white-space: nowrap;
+    font-size: 11px; letter-spacing: .16em; padding: 7px 12px; border-radius: 3px; border: 1px solid transparent; }
+
+  svg text { font-family: 'Share Tech Mono', monospace; }
+  .s-minor   { stroke: color-mix(in srgb, var(--accent) 9%, transparent);  stroke-width: 1; }
+  .s-major   { stroke: color-mix(in srgb, var(--accent) 16%, transparent); stroke-width: 1; }
+  .s-axis    { stroke: color-mix(in srgb, var(--accent) 42%, transparent); stroke-width: 1.4; }
+  .s-support { fill: none; stroke: color-mix(in srgb, var(--accent) 55%, transparent); stroke-width: 1.4; stroke-dasharray: 7 6; }
+  .s-plat    { fill: none; stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 var(--glow1) color-mix(in srgb, var(--accent) 55%, transparent)); }
+  .s-vec     { stroke: color-mix(in srgb, var(--alert) 55%, transparent); stroke-width: 1.6; stroke-dasharray: 5 4; }
+  .s-sensor  { fill: color-mix(in srgb, var(--accent) 8%, transparent); stroke: color-mix(in srgb, var(--accent) 45%, transparent); stroke-width: 1.4; }
+  .s-ppdot   { fill: var(--accent); }
+  .s-cross   { stroke: color-mix(in srgb, var(--alert) 30%, transparent); stroke-width: 1; stroke-dasharray: 2 5; }
+  .s-ring    { fill: none; stroke: var(--alert); stroke-width: 1.6; filter: drop-shadow(0 0 var(--glow1) var(--alert)); }
+  .s-cop     { fill: var(--alert); filter: drop-shadow(0 0 var(--glow2) var(--alert)); }
+  .s-tick    { fill: var(--ink-dim); font-size: 13px; }
+  .s-axtitle { fill: var(--ink); font-size: 13px; letter-spacing: .08em; }
+
+  .tweaks { position: fixed; top: 12px; right: 12px; z-index: 20; display: flex; gap: 12px; align-items: center;
+    font-family: 'Share Tech Mono', monospace; font-size: 11px; color: var(--ink-dim);
+    background: rgba(6,12,18,.8); border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
+    border-radius: 4px; padding: 6px 10px; }
+  .tweaks select { background: #0a1622; color: var(--ink); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); font-family: inherit; font-size: 11px; }
+  .tweaks label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="root" id="root"
+     style="--accent:#2fe6ff; --alert:#ff5747; --ink:#dcf4fb; --ink-dim:#6f93a3; --glow1:6px; --glow2:13px; --grid-op:1;">
+
+  <div class="scanlines"></div>
+  <div class="vignette"></div>
+
+  <div class="tweaks">
+    <label>акцент
+      <select id="tw-accent">
+        <option value="#2fe6ff" selected>cyan</option>
+        <option value="#ffb02e">amber</option>
+        <option value="#46e08a">green</option>
+        <option value="#ff5cc8">magenta</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="tw-glow" checked>свечение</label>
+    <label><input type="checkbox" id="tw-grid" checked>сетка</label>
+  </div>
+
+  <div class="container">
+
+    <!-- HEADER -->
+    <header style="display:flex; align-items:flex-end; justify-content:space-between; gap:24px;
+                   border-bottom:1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+                   padding-bottom:16px; margin-bottom:22px;">
+      <div style="display:flex; align-items:flex-end; gap:16px;">
+        <div style="width:14px; height:42px; background:var(--accent); box-shadow:0 0 var(--glow2) var(--accent);"></div>
+        <div>
+          <div style="font-size:30px; font-weight:700; letter-spacing:.2em;
+                      text-shadow:0 0 18px color-mix(in srgb, var(--accent) 45%, transparent);">ВИЗУАЛИЗАТОР CoP</div>
+          <div class="mono" style="font-size:12px; letter-spacing:.22em; color:var(--ink-dim); margin-top:6px;">ЦЕНТР ДАВЛЕНИЯ · СМ ОТ ЦЕНТРА ПЛАТФОРМЫ</div>
+        </div>
+      </div>
+      <div style="display:flex; gap:10px;">
+        <div class="chip mono" id="chip-online" style="color:var(--alert); border-color:color-mix(in srgb, var(--alert) 30%, transparent);">
+          <span id="online-dot" style="width:7px; height:7px; border-radius:50%; background:var(--alert); box-shadow:0 0 6px var(--alert);"></span><span id="online-text">OFFLINE</span>
+        </div>
+        <div class="chip mono" style="color:var(--ink-dim); border-color:color-mix(in srgb, var(--accent) 18%, transparent);">ПЛАТФОРМА 95×95</div>
+        <div class="chip mono" id="chip-status" style="color:var(--ink-dim); border-color:color-mix(in srgb, var(--accent) 18%, transparent);">
+          <span id="status-dot" style="width:7px; height:7px; border-radius:50%; background:var(--ink-dim);"></span><span id="status-text">ОЖИДАНИЕ</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- BODY -->
+    <div class="body-grid">
+
+      <!-- ЛЕВАЯ -->
+      <aside class="left">
+        <div class="panel">
+          <div class="label">Общий вес</div>
+          <div style="display:flex; align-items:baseline; gap:8px; margin-top:10px;">
+            <span class="mono" id="val-weight" style="font-size:58px; line-height:1; color:var(--accent);
+                  text-shadow:0 0 22px color-mix(in srgb, var(--accent) 50%, transparent);">0.00</span>
+            <span style="font-size:18px; color:var(--ink-dim);">кг</span>
+          </div>
+          <div style="height:6px; background:rgba(255,255,255,.05); border-radius:3px; margin-top:14px; overflow:hidden;">
+            <div id="bar-weight" style="height:100%; width:0%;
+                 background:linear-gradient(90deg, color-mix(in srgb, var(--accent) 30%, transparent), var(--accent));
+                 box-shadow:0 0 var(--glow1) var(--accent); transition:width .12s linear;"></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="label">Центр давления</div>
+          <div style="display:flex; gap:14px; margin-top:12px;">
+            <div style="flex:1; border:1px solid color-mix(in srgb, var(--accent) 16%, transparent); background:rgba(0,0,0,.25); padding:12px 14px; border-radius:4px;">
+              <div style="font-size:11px; color:var(--ink-dim);">CoP X</div>
+              <div class="mono" id="val-copx" style="font-size:26px; color:var(--ink); margin:2px 0;">+0.0</div>
+              <div style="font-size:11px; color:var(--ink-dim);">см</div>
+            </div>
+            <div style="flex:1; border:1px solid color-mix(in srgb, var(--accent) 16%, transparent); background:rgba(0,0,0,.25); padding:12px 14px; border-radius:4px;">
+              <div style="font-size:11px; color:var(--ink-dim);">CoP Y</div>
+              <div class="mono" id="val-copy" style="font-size:26px; color:var(--ink); margin:2px 0;">+0.0</div>
+              <div style="font-size:11px; color:var(--ink-dim);">см</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" id="panel-offset" style="flex:1; display:flex; flex-direction:column;
+             border-color:color-mix(in srgb, var(--accent) 20%, transparent);">
+          <div class="label">Смещение от центра</div>
+          <div style="display:flex; align-items:baseline; gap:8px; margin-top:10px;">
+            <span class="mono" id="val-offset" style="font-size:42px; line-height:1; color:var(--accent);">0.0</span>
+            <span style="font-size:16px; color:var(--ink-dim);">см</span>
+          </div>
+          <div style="height:8px; background:rgba(255,255,255,.05); border-radius:4px; margin-top:14px; overflow:hidden;">
+            <div id="bar-offset" style="height:100%; width:0%;
+                 background:linear-gradient(90deg, color-mix(in srgb, var(--accent) 30%, transparent), var(--accent));
+                 box-shadow:0 0 var(--glow1) var(--accent); transition:width .12s linear;"></div>
+          </div>
+          <div class="mono" style="display:flex; justify-content:space-between; font-size:10px; color:var(--ink-dim); margin-top:8px;">
+            <span>норма &lt; 5 см</span><span>макс 46 см</span>
+          </div>
+          <div id="stab-text" style="margin-top:auto; font-size:12px; letter-spacing:.14em; color:var(--ink-dim); padding-top:18px;">● СТАБИЛЬНОСТЬ: ОЖИДАНИЕ</div>
+        </div>
+      </aside>
+
+      <!-- ЦЕНТР -->
+      <main>
+        <div class="panel" style="background:rgba(6,12,18,.6); border-color:color-mix(in srgb, var(--accent) 22%, transparent); padding:16px 18px 12px; position:relative;">
+          <div style="position:absolute; top:10px; left:10px; width:18px; height:18px; opacity:.7; border-top:2px solid var(--accent); border-left:2px solid var(--accent);"></div>
+          <div style="position:absolute; top:10px; right:10px; width:18px; height:18px; opacity:.7; border-top:2px solid var(--accent); border-right:2px solid var(--accent);"></div>
+          <div style="position:absolute; bottom:10px; left:10px; width:18px; height:18px; opacity:.7; border-bottom:2px solid var(--accent); border-left:2px solid var(--accent);"></div>
+          <div style="position:absolute; bottom:10px; right:10px; width:18px; height:18px; opacity:.7; border-bottom:2px solid var(--accent); border-right:2px solid var(--accent);"></div>
+
+          <svg viewBox="0 0 700 680" style="width:100%; height:auto; display:block;">
+            <g style="opacity:var(--grid-op);">
+              <line class="s-minor" x1="202" y1="54" x2="202" y2="586"/><line class="s-minor" x1="314" y1="54" x2="314" y2="586"/>
+              <line class="s-minor" x1="426" y1="54" x2="426" y2="586"/><line class="s-minor" x1="538" y1="54" x2="538" y2="586"/>
+              <line class="s-minor" x1="104" y1="152" x2="636" y2="152"/><line class="s-minor" x1="104" y1="264" x2="636" y2="264"/>
+              <line class="s-minor" x1="104" y1="376" x2="636" y2="376"/><line class="s-minor" x1="104" y1="488" x2="636" y2="488"/>
+            </g>
+            <g style="opacity:var(--grid-op);">
+              <line class="s-major" x1="146" y1="54" x2="146" y2="586"/><line class="s-major" x1="258" y1="54" x2="258" y2="586"/>
+              <line class="s-major" x1="482" y1="54" x2="482" y2="586"/><line class="s-major" x1="594" y1="54" x2="594" y2="586"/>
+              <line class="s-major" x1="104" y1="96"  x2="636" y2="96"/><line class="s-major" x1="104" y1="208" x2="636" y2="208"/>
+              <line class="s-major" x1="104" y1="432" x2="636" y2="432"/><line class="s-major" x1="104" y1="544" x2="636" y2="544"/>
+            </g>
+            <line class="s-axis" x1="370" y1="54" x2="370" y2="586"/><line class="s-axis" x1="104" y1="320" x2="636" y2="320"/>
+            <rect class="s-support" x="188" y="138" width="364" height="364" rx="2"/>
+            <rect class="s-plat" x="104" y="54" width="532" height="532" rx="3"/>
+
+            <line id="vec" class="s-vec" x1="370" y1="320" x2="370" y2="320"/>
+
+            <!-- датчики: узел + точка + подписи (обновляются скриптом) -->
+            <circle id="node-PL" class="s-sensor" cx="188" cy="138" r="8"/><circle id="dot-PL" class="s-ppdot" cx="188" cy="138" r="0"/>
+            <text id="lbl-PL-name" text-anchor="start" x="206" y="124" style="fill:var(--ink-dim); font-size:14px;">PL</text>
+            <text id="lbl-PL-val"  text-anchor="start" x="206" y="141" style="fill:var(--ink-dim); font-size:13px;">0.00 кг</text>
+
+            <circle id="node-ZL" class="s-sensor" cx="188" cy="502" r="8"/><circle id="dot-ZL" class="s-ppdot" cx="188" cy="502" r="0"/>
+            <text id="lbl-ZL-name" text-anchor="start" x="206" y="492" style="fill:var(--ink-dim); font-size:14px;">ZL</text>
+            <text id="lbl-ZL-val"  text-anchor="start" x="206" y="509" style="fill:var(--ink-dim); font-size:13px;">0.00 кг</text>
+
+            <circle id="node-ZP" class="s-sensor" cx="552" cy="502" r="8"/><circle id="dot-ZP" class="s-ppdot" cx="552" cy="502" r="0"/>
+            <text id="lbl-ZP-name" text-anchor="end" x="534" y="492" style="fill:var(--ink-dim); font-size:14px;">ZP</text>
+            <text id="lbl-ZP-val"  text-anchor="end" x="534" y="509" style="fill:var(--ink-dim); font-size:13px;">0.00 кг</text>
+
+            <circle id="node-PP" class="s-sensor" cx="552" cy="138" r="8"/><circle id="dot-PP" class="s-ppdot" cx="552" cy="138" r="0"/>
+            <text id="lbl-PP-name" text-anchor="middle" x="552" y="74" style="fill:var(--ink-dim); font-size:15px;">PP</text>
+            <text id="lbl-PP-val"  text-anchor="middle" x="552" y="92" style="fill:var(--ink-dim); font-size:14px;">0.00 кг</text>
+
+            <line id="cross-v" class="s-cross" x1="370" y1="54"  x2="370" y2="586"/>
+            <line id="cross-h" class="s-cross" x1="104" y1="320" x2="636" y2="320"/>
+            <circle id="cop-ring" class="s-ring" cx="370" cy="320" r="13"/>
+            <circle id="cop-dot"  class="s-cop"  cx="370" cy="320" r="5.5"/>
+
+            <text class="s-tick" text-anchor="middle" x="146" y="606">−40</text><text class="s-tick" text-anchor="middle" x="258" y="606">−20</text>
+            <text class="s-tick" text-anchor="middle" x="370" y="606">0</text><text class="s-tick" text-anchor="middle" x="482" y="606">20</text>
+            <text class="s-tick" text-anchor="middle" x="594" y="606">40</text>
+            <text class="s-tick" text-anchor="end" x="86" y="100">40</text><text class="s-tick" text-anchor="end" x="86" y="212">20</text>
+            <text class="s-tick" text-anchor="end" x="86" y="324">0</text><text class="s-tick" text-anchor="end" x="86" y="436">−20</text>
+            <text class="s-tick" text-anchor="end" x="86" y="548">−40</text>
+            <text class="s-axtitle" text-anchor="middle" x="370" y="640">X, см  (− влево … + вправо)</text>
+            <text class="s-axtitle" text-anchor="middle" x="28" y="320" transform="rotate(-90 28 320)">Y, см  (− назад … + вперёд)</text>
+          </svg>
+
+          <div class="mono" style="display:flex; justify-content:center; flex-wrap:wrap; gap:26px; font-size:11px; letter-spacing:.08em; color:var(--ink-dim); margin-top:6px;">
+            <span style="display:flex; align-items:center; gap:8px;"><span style="width:22px; border-top:2px solid var(--accent);"></span>платформа 95×95 см</span>
+            <span style="display:flex; align-items:center; gap:8px;"><span style="width:22px; border-top:2px dashed color-mix(in srgb, var(--accent) 60%, transparent);"></span>опоры 65×65 см</span>
+            <span style="display:flex; align-items:center; gap:8px;"><span style="width:11px; height:11px; border-radius:50%; border:1.5px solid var(--alert); box-shadow:0 0 6px var(--alert);"></span>центр давления</span>
+          </div>
+        </div>
+      </main>
+
+      <!-- ПРАВАЯ -->
+      <aside class="right">
+        <div class="panel">
+          <div class="label">Нагрузка датчиков</div>
+          <div style="display:flex; flex-direction:column; gap:16px; margin-top:14px;" id="sensorbars"></div>
+        </div>
+
+        <div class="panel" style="flex:1; display:flex; flex-direction:column;">
+          <div class="label">Баланс</div>
+
+          <div style="margin-top:16px; margin-bottom:24px;">
+            <div class="mono" style="display:flex; justify-content:space-between; font-size:12px;">
+              <span id="lr-left" style="color:var(--ink-dim);">ЛЕВО 0%</span><span id="lr-right" style="color:var(--ink-dim);">0% ПРАВО</span>
+            </div>
+            <div style="position:relative; height:12px; border-radius:6px; background:rgba(255,255,255,.05); margin-top:8px;">
+              <div style="position:absolute; left:50%; top:-3px; bottom:-3px; width:1px; background:color-mix(in srgb, var(--ink) 35%, transparent);"></div>
+              <div id="lr-fill" style="position:absolute; left:50%; top:0; bottom:0; width:0%; border-radius:0 6px 6px 0;
+                   background:linear-gradient(90deg, color-mix(in srgb, var(--accent) 25%, transparent), var(--accent)); box-shadow:0 0 var(--glow1) var(--accent);"></div>
+              <div id="lr-knob" style="position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+                   width:14px; height:14px; border-radius:50%; background:var(--accent); box-shadow:0 0 10px var(--accent);"></div>
+            </div>
+          </div>
+
+          <div>
+            <div class="mono" style="display:flex; justify-content:space-between; font-size:12px;">
+              <span id="bf-left" style="color:var(--ink-dim);">НАЗАД 0%</span><span id="bf-right" style="color:var(--ink-dim);">0% ВПЕРЁД</span>
+            </div>
+            <div style="position:relative; height:12px; border-radius:6px; background:rgba(255,255,255,.05); margin-top:8px;">
+              <div style="position:absolute; left:50%; top:-3px; bottom:-3px; width:1px; background:color-mix(in srgb, var(--ink) 35%, transparent);"></div>
+              <div id="bf-fill" style="position:absolute; left:50%; top:0; bottom:0; width:0%; border-radius:0 6px 6px 0;
+                   background:linear-gradient(90deg, color-mix(in srgb, var(--accent) 25%, transparent), var(--accent)); box-shadow:0 0 var(--glow1) var(--accent);"></div>
+              <div id="bf-knob" style="position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+                   width:14px; height:14px; border-radius:50%; background:var(--accent); box-shadow:0 0 10px var(--accent);"></div>
+            </div>
+          </div>
+
+          <div class="mono" id="reco" style="margin-top:auto; padding-top:20px; font-size:11px; line-height:1.7; color:var(--ink-dim);
+               border-top:1px solid color-mix(in srgb, var(--accent) 14%, transparent);">ОЖИДАНИЕ ДАННЫХ…</div>
+        </div>
+      </aside>
+
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- твики темы ----------
+(function () {
+  var root = document.getElementById('root');
+  var acc = document.getElementById('tw-accent'), glow = document.getElementById('tw-glow'), grid = document.getElementById('tw-grid');
+  function apply() {
+    root.style.setProperty('--accent', acc.value);
+    root.style.setProperty('--glow1', glow.checked ? '6px' : '0px');
+    root.style.setProperty('--glow2', glow.checked ? '13px' : '0px');
+    root.style.setProperty('--grid-op', grid.checked ? '1' : '0');
+  }
+  acc.onchange = glow.onchange = grid.onchange = apply;
+})();
+
+// ---------- геометрия (см -> px) ----------
+const pxX = cm => 370 + cm * 5.6;
+const pxY = cm => 320 - cm * 5.6;
+const clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
+
+// масштаб шкалы «общий вес» (на сколько кг полоса = 100%); подстрой под задачу
+const WEIGHT_MAX = 150;
+const NORM_OFFSET = 5;     // норма смещения, см
+const MAX_OFFSET  = 46;    // макс смещение (угол опор), см
+
+// датчики: позиция узла (px) и индекс в массиве corners [PL,PP,ZL,ZP]
+const SENS = [
+  { k: "PL", idx: 0, sub: "перед. левая",  cx: 188, cy: 138 },
+  { k: "PP", idx: 1, sub: "перед. правая", cx: 552, cy: 138 },
+  { k: "ZL", idx: 2, sub: "задн. левая",   cx: 188, cy: 502 },
+  { k: "ZP", idx: 3, sub: "задн. правая",  cx: 552, cy: 502 },
+];
+
+// ---------- бары нагрузки (правая колонка) ----------
+(function buildSensorBars() {
+  const box = document.getElementById("sensorbars");
+  for (const s of SENS) {
+    box.insertAdjacentHTML("beforeend", `
+      <div>
+        <div class="mono" style="display:flex; justify-content:space-between; align-items:baseline;">
+          <span><span id="sn-${s.k}" style="font-size:14px; color:var(--ink);">${s.k}</span>
+                <span style="font-size:11px; color:var(--ink-dim);">${s.sub}</span></span>
+          <span id="sv-${s.k}" style="font-size:13px; color:var(--ink-dim);">0.00 кг · 0%</span>
+        </div>
+        <div style="height:9px; border-radius:5px; background:rgba(255,255,255,.05); overflow:hidden; margin-top:8px;">
+          <div id="sb-${s.k}" style="height:100%; width:0%;
+               background:linear-gradient(90deg, color-mix(in srgb, var(--accent) 35%, transparent), var(--accent));
+               box-shadow:0 0 var(--glow1) var(--accent); transition:width .12s linear;"></div>
+        </div>
+      </div>`);
+  }
+})();
+
+// ---------- состояние + сглаживание ----------
+const SMOOTH = 0.3;
+const tgt = { corners: [0,0,0,0], W: 0, copX: 0, copY: 0 };
+const cur = { corners: [0,0,0,0], W: 0, copX: 0, copY: 0 };
+let haveData = false;
+
+// ---------- WebSocket ----------
+function connect() {
+  const url = `ws://${location.hostname || "localhost"}:8765`;
+  const ws = new WebSocket(url);
+  ws.onopen = () => setOnline(true);
+  ws.onclose = () => { setOnline(false); setTimeout(connect, 1000); };
+  ws.onerror = () => ws.close();
+  ws.onmessage = (ev) => {
+    const d = JSON.parse(ev.data);
+    tgt.corners = d.corners; tgt.W = d.W; tgt.copX = d.copX; tgt.copY = d.copY;
+    haveData = true;
+  };
+}
+function setOnline(on) {
+  const c = document.getElementById("chip-online");
+  document.getElementById("online-text").textContent = on ? "ONLINE" : "OFFLINE";
+  const col = on ? "var(--accent)" : "var(--alert)";
+  c.style.color = col;
+  c.style.borderColor = `color-mix(in srgb, ${on ? "var(--accent) 30%" : "var(--alert) 30%"}, transparent)`;
+  document.getElementById("online-dot").style.background = col;
+  document.getElementById("online-dot").style.boxShadow = `0 0 6px ${col}`;
+}
+
+// ---------- помощник: установить элемент баланса ----------
+function setBalance(prefix, leftPct, rightPct, leftWord, rightWord) {
+  const value = rightPct - leftPct;                 // -100..100, + => тяжелее справа
+  const half = 50, mag = Math.abs(value) / 100 * half;
+  const fill = document.getElementById(prefix + "-fill");
+  if (value >= 0) { fill.style.left = "50%"; fill.style.right = "auto"; fill.style.borderRadius = "0 6px 6px 0"; }
+  else            { fill.style.right = "50%"; fill.style.left = "auto"; fill.style.borderRadius = "6px 0 0 6px"; }
+  fill.style.width = mag + "%";
+  document.getElementById(prefix + "-knob").style.left = (50 + value / 100 * half) + "%";
+
+  const lEl = document.getElementById(prefix + "-left");
+  const rEl = document.getElementById(prefix + "-right");
+  lEl.textContent = `${leftWord} ${Math.round(leftPct)}%`;
+  rEl.textContent = `${Math.round(rightPct)}% ${rightWord}`;
+  lEl.style.color = leftPct >= rightPct ? "var(--accent)" : "var(--ink-dim)";
+  rEl.style.color = rightPct >  leftPct ? "var(--accent)" : "var(--ink-dim)";
+}
+
+// ---------- помощник: один датчик в SVG ----------
+function setSensor(s, load, maxLoad, W) {
+  const frac = maxLoad > 0.01 ? clamp(load / maxLoad, 0, 1) : 0;
+  const node = document.getElementById("node-" + s.k);
+  const dot  = document.getElementById("dot-" + s.k);
+  node.setAttribute("r", (8 + frac * 38).toFixed(1));
+  node.style.fill = `color-mix(in srgb, var(--accent) ${(8 + frac * 12).toFixed(0)}%, transparent)`;
+  node.style.stroke = "var(--accent)";
+  node.style.strokeWidth = (1.4 + frac * 0.6).toFixed(2);
+  node.style.filter = `drop-shadow(0 0 ${(frac * 13).toFixed(1)}px color-mix(in srgb, var(--accent) 60%, transparent))`;
+  dot.setAttribute("r", (frac * 5).toFixed(1));
+
+  const active = frac > 0.5;
+  const nameCol = active ? "var(--accent)" : "var(--ink)";
+  const valCol  = active ? "var(--accent)" : "var(--ink-dim)";
+  const pct = W > 0.01 ? load / W * 100 : 0;
+  document.getElementById("lbl-" + s.k + "-name").style.fill = active ? "var(--accent)" : "var(--ink-dim)";
+  document.getElementById("lbl-" + s.k + "-val").textContent = load.toFixed(2) + " кг";
+  document.getElementById("lbl-" + s.k + "-val").style.fill  = active ? "var(--accent)" : "var(--ink-dim)";
+  // правый бар
+  document.getElementById("sn-" + s.k).style.color = nameCol;
+  document.getElementById("sv-" + s.k).style.color = valCol;
+  document.getElementById("sv-" + s.k).textContent = `${load.toFixed(2)} кг · ${pct.toFixed(0)}%`;
+  document.getElementById("sb-" + s.k).style.width = clamp(pct, 0, 100) + "%";
+}
+
+// ---------- основной цикл ----------
+function tick() {
+  if (haveData) {
+    const a = SMOOTH;
+    cur.W += a * (tgt.W - cur.W);
+    cur.copX += a * (tgt.copX - cur.copX);
+    cur.copY += a * (tgt.copY - cur.copY);
+    for (let i = 0; i < 4; i++) cur.corners[i] += a * (tgt.corners[i] - cur.corners[i]);
+
+    const [PL, PP, ZL, ZP] = cur.corners;
+    const W = cur.W;
+    const maxLoad = Math.max(PL, PP, ZL, ZP, 0.0001);
+
+    // вес
+    document.getElementById("val-weight").textContent = W.toFixed(2);
+    document.getElementById("bar-weight").style.width = clamp(W / WEIGHT_MAX * 100, 0, 100) + "%";
+
+    // CoP координаты
+    const sgn = v => (v >= 0 ? "+" : "") + v.toFixed(1);
+    document.getElementById("val-copx").textContent = sgn(cur.copX);
+    document.getElementById("val-copy").textContent = sgn(cur.copY);
+
+    // CoP маркер в поле
+    const mx = pxX(clamp(cur.copX, -47.5, 47.5)), my = pxY(clamp(cur.copY, -47.5, 47.5));
+    const vec = document.getElementById("vec"); vec.setAttribute("x2", mx); vec.setAttribute("y2", my);
+    document.getElementById("cross-v").setAttribute("x1", mx);
+    document.getElementById("cross-v").setAttribute("x2", mx);
+    document.getElementById("cross-h").setAttribute("y1", my);
+    document.getElementById("cross-h").setAttribute("y2", my);
+    document.getElementById("cop-ring").setAttribute("cx", mx); document.getElementById("cop-ring").setAttribute("cy", my);
+    document.getElementById("cop-dot").setAttribute("cx", mx);  document.getElementById("cop-dot").setAttribute("cy", my);
+
+    // датчики
+    for (const s of SENS) setSensor(s, cur.corners[s.idx], maxLoad, W);
+
+    // смещение от центра + статус
+    const off = Math.hypot(cur.copX, cur.copY);
+    const crit = off > NORM_OFFSET;
+    const offCol = crit ? "var(--alert)" : "var(--accent)";
+    const vo = document.getElementById("val-offset");
+    vo.textContent = off.toFixed(1);
+    vo.style.color = offCol;
+    vo.style.textShadow = `0 0 22px color-mix(in srgb, ${crit ? "var(--alert)" : "var(--accent)"} 50%, transparent)`;
+    const bo = document.getElementById("bar-offset");
+    bo.style.width = clamp(off / MAX_OFFSET * 100, 0, 100) + "%";
+    bo.style.background = `linear-gradient(90deg, color-mix(in srgb, ${crit ? "var(--alert)" : "var(--accent)"} 30%, transparent), ${offCol})`;
+    bo.style.boxShadow = `0 0 var(--glow1) ${offCol}`;
+    document.getElementById("panel-offset").style.borderColor =
+      `color-mix(in srgb, ${crit ? "var(--alert) 28%" : "var(--accent) 20%"}, transparent)`;
+    const st = document.getElementById("stab-text");
+    st.textContent = crit ? "▲ СТАБИЛЬНОСТЬ: КРИТИЧЕСКАЯ" : "● СТАБИЛЬНОСТЬ: В НОРМЕ";
+    st.style.color = offCol;
+
+    // чип статуса в шапке
+    const cs = document.getElementById("chip-status");
+    document.getElementById("status-text").textContent = crit ? "КРИТ. СМЕЩЕНИЕ" : "СМЕЩЕНИЕ В НОРМЕ";
+    cs.style.color = offCol;
+    cs.style.borderColor = `color-mix(in srgb, ${crit ? "var(--alert) 45%" : "var(--accent) 30%"}, transparent)`;
+    cs.style.background = crit ? "color-mix(in srgb, var(--alert) 10%, transparent)" : "transparent";
+    const sd = document.getElementById("status-dot");
+    sd.style.background = offCol; sd.style.boxShadow = `0 0 6px ${offCol}`;
+
+    // баланс (проценты из углов)
+    if (W > 0.01) {
+      const left = (PL + ZL) / W * 100, right = (PP + ZP) / W * 100;
+      const back = (ZL + ZP) / W * 100, front = (PL + PP) / W * 100;
+      setBalance("lr", left, right, "ЛЕВО", "ПРАВО");
+      setBalance("bf", back, front, "НАЗАД", "ВПЕРЁД");
+    }
+
+    // рекомендация
+    const reco = document.getElementById("reco");
+    if (!crit) {
+      reco.innerHTML = `<span style="color:var(--accent);">ЦЕНТР ДАВЛЕНИЯ В НОРМЕ.</span><br>БАЛАНС УДЕРЖИВАЕТСЯ.`;
+    } else {
+      const dy = cur.copY >= 0 ? "ВПЕРЁД" : "НАЗАД";
+      const dx = Math.abs(cur.copX) > 3 ? (cur.copX > 0 ? "-ВПРАВО" : "-ВЛЕВО") : "";
+      reco.innerHTML = `СМЕЩЕНИЕ ВЕСА: ${dy}${dx}.<br>` +
+                       `<span style="color:var(--alert);">РЕКОМЕНДАЦИЯ: ВЫРОВНЯТЬ.</span>`;
+    }
+  }
+  requestAnimationFrame(tick);
+}
+
+connect();
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
