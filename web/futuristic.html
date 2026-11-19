@@ -100,7 +100,10 @@
         <div class="chip mono" id="chip-online" style="color:var(--alert); border-color:color-mix(in srgb, var(--alert) 30%, transparent);">
           <span id="online-dot" style="width:7px; height:7px; border-radius:50%; background:var(--alert); box-shadow:0 0 6px var(--alert);"></span><span id="online-text">OFFLINE</span>
         </div>
-        <div class="chip mono" style="color:var(--ink-dim); border-color:color-mix(in srgb, var(--accent) 18%, transparent);">ПЛАТФОРМА 95×95</div>
+        <div class="chip mono" style="color:var(--ink-dim); border-color:color-mix(in srgb, var(--accent) 18%, transparent);" id="chip-plat">ПЛАТФОРМА 80×60</div>
+        <div class="chip mono" id="chip-overload" style="display:none; color:var(--alert); border-color:color-mix(in srgb, var(--alert) 45%, transparent); background:color-mix(in srgb, var(--alert) 12%, transparent);">
+          ▲ <span id="overload-text">ПЕРЕГРУЗ</span>
+        </div>
         <div class="chip mono" id="chip-status" style="color:var(--ink-dim); border-color:color-mix(in srgb, var(--accent) 18%, transparent);">
           <span id="status-dot" style="width:7px; height:7px; border-radius:50%; background:var(--ink-dim);"></span><span id="status-text">ОЖИДАНИЕ</span>
         </div>
@@ -155,7 +158,7 @@
                  box-shadow:0 0 var(--glow1) var(--accent); transition:width .12s linear;"></div>
           </div>
           <div class="mono" style="display:flex; justify-content:space-between; font-size:10px; color:var(--ink-dim); margin-top:8px;">
-            <span>норма &lt; 5 см</span><span>макс 46 см</span>
+            <span>норма &lt; 5 см</span><span id="lbl-maxoff">макс 45 см</span>
           </div>
           <div id="stab-text" style="margin-top:auto; font-size:12px; letter-spacing:.14em; color:var(--ink-dim); padding-top:18px;">● СТАБИЛЬНОСТЬ: ОЖИДАНИЕ</div>
         </div>
@@ -169,60 +172,30 @@
           <div style="position:absolute; bottom:10px; left:10px; width:18px; height:18px; opacity:.7; border-bottom:2px solid var(--accent); border-left:2px solid var(--accent);"></div>
           <div style="position:absolute; bottom:10px; right:10px; width:18px; height:18px; opacity:.7; border-bottom:2px solid var(--accent); border-right:2px solid var(--accent);"></div>
 
-          <svg viewBox="0 0 700 680" style="width:100%; height:auto; display:block;">
-            <g style="opacity:var(--grid-op);">
-              <line class="s-minor" x1="202" y1="54" x2="202" y2="586"/><line class="s-minor" x1="314" y1="54" x2="314" y2="586"/>
-              <line class="s-minor" x1="426" y1="54" x2="426" y2="586"/><line class="s-minor" x1="538" y1="54" x2="538" y2="586"/>
-              <line class="s-minor" x1="104" y1="152" x2="636" y2="152"/><line class="s-minor" x1="104" y1="264" x2="636" y2="264"/>
-              <line class="s-minor" x1="104" y1="376" x2="636" y2="376"/><line class="s-minor" x1="104" y1="488" x2="636" y2="488"/>
-            </g>
-            <g style="opacity:var(--grid-op);">
-              <line class="s-major" x1="146" y1="54" x2="146" y2="586"/><line class="s-major" x1="258" y1="54" x2="258" y2="586"/>
-              <line class="s-major" x1="482" y1="54" x2="482" y2="586"/><line class="s-major" x1="594" y1="54" x2="594" y2="586"/>
-              <line class="s-major" x1="104" y1="96"  x2="636" y2="96"/><line class="s-major" x1="104" y1="208" x2="636" y2="208"/>
-              <line class="s-major" x1="104" y1="432" x2="636" y2="432"/><line class="s-major" x1="104" y1="544" x2="636" y2="544"/>
-            </g>
-            <line class="s-axis" x1="370" y1="54" x2="370" y2="586"/><line class="s-axis" x1="104" y1="320" x2="636" y2="320"/>
-            <rect class="s-support" x="188" y="138" width="364" height="364" rx="2"/>
-            <rect class="s-plat" x="104" y="54" width="532" height="532" rx="3"/>
+          <!-- поле платформы: сетка, контуры, датчики и шкалы строятся скриптом из геометрии -->
+          <svg id="field" viewBox="0 0 700 540" style="width:100%; height:auto; display:block;">
+            <g id="grid" style="opacity:var(--grid-op);"></g>
+            <line id="axis-v" class="s-axis"/><line id="axis-h" class="s-axis"/>
+            <polygon id="support" class="s-support"/>
+            <rect id="plat" class="s-plat" rx="3"/>
 
-            <line id="vec" class="s-vec" x1="370" y1="320" x2="370" y2="320"/>
+            <line id="vec" class="s-vec" x1="370" y1="260" x2="370" y2="260"/>
 
-            <!-- датчики: узел + точка + подписи (обновляются скриптом) -->
-            <circle id="node-PL" class="s-sensor" cx="188" cy="138" r="8"/><circle id="dot-PL" class="s-ppdot" cx="188" cy="138" r="0"/>
-            <text id="lbl-PL-name" text-anchor="start" x="206" y="124" style="fill:var(--ink-dim); font-size:14px;">PL</text>
-            <text id="lbl-PL-val"  text-anchor="start" x="206" y="141" style="fill:var(--ink-dim); font-size:13px;">0.00 кг</text>
+            <g id="sensors"></g>
 
-            <circle id="node-ZL" class="s-sensor" cx="188" cy="502" r="8"/><circle id="dot-ZL" class="s-ppdot" cx="188" cy="502" r="0"/>
-            <text id="lbl-ZL-name" text-anchor="start" x="206" y="492" style="fill:var(--ink-dim); font-size:14px;">ZL</text>
-            <text id="lbl-ZL-val"  text-anchor="start" x="206" y="509" style="fill:var(--ink-dim); font-size:13px;">0.00 кг</text>
+            <line id="cross-v" class="s-cross"/>
+            <line id="cross-h" class="s-cross"/>
+            <circle id="cop-ring" class="s-ring" cx="370" cy="260" r="13"/>
+            <circle id="cop-dot"  class="s-cop"  cx="370" cy="260" r="5.5"/>
 
-            <circle id="node-ZP" class="s-sensor" cx="552" cy="502" r="8"/><circle id="dot-ZP" class="s-ppdot" cx="552" cy="502" r="0"/>
-            <text id="lbl-ZP-name" text-anchor="end" x="534" y="492" style="fill:var(--ink-dim); font-size:14px;">ZP</text>
-            <text id="lbl-ZP-val"  text-anchor="end" x="534" y="509" style="fill:var(--ink-dim); font-size:13px;">0.00 кг</text>
-
-            <circle id="node-PP" class="s-sensor" cx="552" cy="138" r="8"/><circle id="dot-PP" class="s-ppdot" cx="552" cy="138" r="0"/>
-            <text id="lbl-PP-name" text-anchor="middle" x="552" y="74" style="fill:var(--ink-dim); font-size:15px;">PP</text>
-            <text id="lbl-PP-val"  text-anchor="middle" x="552" y="92" style="fill:var(--ink-dim); font-size:14px;">0.00 кг</text>
-
-            <line id="cross-v" class="s-cross" x1="370" y1="54"  x2="370" y2="586"/>
-            <line id="cross-h" class="s-cross" x1="104" y1="320" x2="636" y2="320"/>
-            <circle id="cop-ring" class="s-ring" cx="370" cy="320" r="13"/>
-            <circle id="cop-dot"  class="s-cop"  cx="370" cy="320" r="5.5"/>
-
-            <text class="s-tick" text-anchor="middle" x="146" y="606">−40</text><text class="s-tick" text-anchor="middle" x="258" y="606">−20</text>
-            <text class="s-tick" text-anchor="middle" x="370" y="606">0</text><text class="s-tick" text-anchor="middle" x="482" y="606">20</text>
-            <text class="s-tick" text-anchor="middle" x="594" y="606">40</text>
-            <text class="s-tick" text-anchor="end" x="86" y="100">40</text><text class="s-tick" text-anchor="end" x="86" y="212">20</text>
-            <text class="s-tick" text-anchor="end" x="86" y="324">0</text><text class="s-tick" text-anchor="end" x="86" y="436">−20</text>
-            <text class="s-tick" text-anchor="end" x="86" y="548">−40</text>
-            <text class="s-axtitle" text-anchor="middle" x="370" y="640">X, см  (− влево … + вправо)</text>
-            <text class="s-axtitle" text-anchor="middle" x="28" y="320" transform="rotate(-90 28 320)">Y, см  (− назад … + вперёд)</text>
+            <g id="ticks"></g>
+            <text class="s-axtitle" text-anchor="middle" x="370" y="528">X, см  (− влево … + вправо)</text>
+            <text class="s-axtitle" text-anchor="middle" x="24" y="260" transform="rotate(-90 24 260)">Y, см  (− назад … + вперёд)</text>
           </svg>
 
           <div class="mono" style="display:flex; justify-content:center; flex-wrap:wrap; gap:26px; font-size:11px; letter-spacing:.08em; color:var(--ink-dim); margin-top:6px;">
-            <span style="display:flex; align-items:center; gap:8px;"><span style="width:22px; border-top:2px solid var(--accent);"></span>платформа 95×95 см</span>
-            <span style="display:flex; align-items:center; gap:8px;"><span style="width:22px; border-top:2px dashed color-mix(in srgb, var(--accent) 60%, transparent);"></span>опоры 65×65 см</span>
+            <span style="display:flex; align-items:center; gap:8px;"><span style="width:22px; border-top:2px solid var(--accent);"></span><span id="leg-plat">платформа 80×60 см</span></span>
+            <span style="display:flex; align-items:center; gap:8px;"><span style="width:22px; border-top:2px dashed color-mix(in srgb, var(--accent) 60%, transparent);"></span><span id="leg-support">опоры ≈73×53 см</span></span>
             <span style="display:flex; align-items:center; gap:8px;"><span style="width:11px; height:11px; border-radius:50%; border:1.5px solid var(--alert); box-shadow:0 0 6px var(--alert);"></span>центр давления</span>
           </div>
         </div>
@@ -289,23 +262,103 @@
   acc.onchange = glow.onchange = grid.onchange = apply;
 })();
 
-// ---------- геометрия (см -> px) ----------
-const pxX = cm => 370 + cm * 5.6;
-const pxY = cm => 320 - cm * 5.6;
+// ---------- геометрия платформы ----------
+// Значения по умолчанию = platform_geometry.py (800x600 мм, датчики 100 кг).
+// Мост при подключении присылает {"type":"geometry"} и они перезаписываются.
+const GEO = {
+  platform: [80, 60],                      // см: X (влево-вправо), Y (вперёд-назад)
+  sensors: { PL: [-36.5, 26.24], PP: [36.5, 26.5], ZL: [-36.4, -26.1], ZP: [36.2, -26.4] },
+  capacity: 100,                           // кг на датчик
+  overloadFrac: 0.9,
+};
 const clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
 
-// масштаб шкалы «общий вес» (на сколько кг полоса = 100%); подстрой под задачу
-const WEIGHT_MAX = 150;
-const NORM_OFFSET = 5;     // норма смещения, см
-const MAX_OFFSET  = 46;    // макс смещение (угол опор), см
+// поле SVG: центр и масштаб (px на см) пересчитываются в buildField()
+const FIELD = { cx: 370, cy: 260, maxW: 560, maxH: 440, k: 7 };
+const pxX = cm => FIELD.cx + cm * FIELD.k;
+const pxY = cm => FIELD.cy - cm * FIELD.k;
 
-// датчики: позиция узла (px) и индекс в массиве corners [PL,PP,ZL,ZP]
+// масштаб шкалы «общий вес» = суммарная грузоподъёмность (4 датчика)
+let WEIGHT_MAX = 4 * GEO.capacity;
+const NORM_OFFSET = 5;     // норма смещения, см
+let MAX_OFFSET = 45;       // макс смещение (самый дальний датчик), см
+
+// датчики: индекс в массиве corners [PL,PP,ZL,ZP]
 const SENS = [
-  { k: "PL", idx: 0, sub: "перед. левая",  cx: 188, cy: 138 },
-  { k: "PP", idx: 1, sub: "перед. правая", cx: 552, cy: 138 },
-  { k: "ZL", idx: 2, sub: "задн. левая",   cx: 188, cy: 502 },
-  { k: "ZP", idx: 3, sub: "задн. правая",  cx: 552, cy: 502 },
+  { k: "PL", idx: 0, sub: "перед. левая"  },
+  { k: "PP", idx: 1, sub: "перед. правая" },
+  { k: "ZL", idx: 2, sub: "задн. левая"   },
+  { k: "ZP", idx: 3, sub: "задн. правая"  },
 ];
+
+const SVGNS = "http://www.w3.org/2000/svg";
+function svgEl(tag, attrs, parent, text) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text !== undefined) e.textContent = text;
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function setAttrs(id, attrs) {
+  const e = document.getElementById(id);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+}
+
+// построить поле: платформа, опоры, сетка, шкалы, узлы датчиков
+function buildField() {
+  const [PW, PH] = GEO.platform, hx = PW / 2, hy = PH / 2;
+  FIELD.k = Math.min(FIELD.maxW / PW, FIELD.maxH / PH);
+  const x0 = pxX(-hx), x1 = pxX(hx), y0 = pxY(hy), y1 = pxY(-hy);
+
+  setAttrs("plat", { x: x0, y: y0, width: x1 - x0, height: y1 - y0 });
+  setAttrs("axis-v", { x1: FIELD.cx, y1: y0, x2: FIELD.cx, y2: y1 });
+  setAttrs("axis-h", { x1: x0, y1: FIELD.cy, x2: x1, y2: FIELD.cy });
+  setAttrs("cross-v", { x1: FIELD.cx, y1: y0, x2: FIELD.cx, y2: y1 });
+  setAttrs("cross-h", { x1: x0, y1: FIELD.cy, x2: x1, y2: FIELD.cy });
+  const S = GEO.sensors;
+  setAttrs("support", { points: ["PL", "PP", "ZP", "ZL"].map(n => pxX(S[n][0]) + "," + pxY(S[n][1])).join(" ") });
+
+  // сетка: мелкая каждые 5 см, крупная каждые 10 см
+  const grid = document.getElementById("grid"); grid.innerHTML = "";
+  const ticks = document.getElementById("ticks"); ticks.innerHTML = "";
+  for (let c = -Math.floor(hx / 5) * 5; c <= hx; c += 5) {
+    if (c === 0) continue;
+    svgEl("line", { class: c % 10 ? "s-minor" : "s-major", x1: pxX(c), y1: y0, x2: pxX(c), y2: y1 }, grid);
+    if (c % 10 === 0) svgEl("text", { class: "s-tick", "text-anchor": "middle", x: pxX(c), y: y1 + 20 }, ticks, String(c).replace("-", "−"));
+  }
+  for (let c = -Math.floor(hy / 5) * 5; c <= hy; c += 5) {
+    if (c === 0) continue;
+    svgEl("line", { class: c % 10 ? "s-minor" : "s-major", x1: x0, y1: pxY(c), x2: x1, y2: pxY(c) }, grid);
+    if (c % 10 === 0) svgEl("text", { class: "s-tick", "text-anchor": "end", x: x0 - 10, y: pxY(c) + 4 }, ticks, String(c).replace("-", "−"));
+  }
+  svgEl("text", { class: "s-tick", "text-anchor": "middle", x: FIELD.cx, y: y1 + 20 }, ticks, "0");
+  svgEl("text", { class: "s-tick", "text-anchor": "end", x: x0 - 10, y: FIELD.cy + 4 }, ticks, "0");
+
+  // датчики: узел + точка + подписи (подписи смещены внутрь платформы)
+  const sens = document.getElementById("sensors"); sens.innerHTML = "";
+  for (const s of SENS) {
+    const [sx, sy] = S[s.k], cx = pxX(sx), cy = pxY(sy);
+    const left = sx < 0, front = sy > 0;
+    svgEl("circle", { id: "node-" + s.k, class: "s-sensor", cx, cy, r: 8 }, sens);
+    svgEl("circle", { id: "dot-" + s.k, class: "s-ppdot", cx, cy, r: 0 }, sens);
+    // подписи - по диагонали внутрь, за пределами макс. круга нагрузки (r=46)
+    const tx = cx + (left ? 50 : -50), anchor = left ? "start" : "end";
+    const ty = front ? cy + 30 : cy - 30;
+    svgEl("text", { id: "lbl-" + s.k + "-name", "text-anchor": anchor, x: tx, y: ty - 8, style: "fill:var(--ink-dim); font-size:14px;" }, sens, s.k);
+    svgEl("text", { id: "lbl-" + s.k + "-val",  "text-anchor": anchor, x: tx, y: ty + 9, style: "fill:var(--ink-dim); font-size:13px;" }, sens, "0.00 кг");
+  }
+
+  // подписи и шкалы, зависящие от геометрии
+  const xs = Object.values(S).map(p => p[0]), ys = Object.values(S).map(p => p[1]);
+  const supW = (Math.max(...xs) - Math.min(...xs)), supH = (Math.max(...ys) - Math.min(...ys));
+  document.getElementById("leg-plat").textContent = `платформа ${PW}×${PH} см`;
+  document.getElementById("leg-support").textContent = `опоры ≈${supW.toFixed(0)}×${supH.toFixed(0)} см`;
+  document.getElementById("chip-plat").textContent = `ПЛАТФОРМА ${PW}×${PH}`;
+  MAX_OFFSET = Math.max(...Object.values(S).map(p => Math.hypot(p[0], p[1])));
+  document.getElementById("lbl-maxoff").textContent = `макс ${MAX_OFFSET.toFixed(0)} см`;
+  WEIGHT_MAX = 4 * GEO.capacity;
+}
+buildField();
 
 // ---------- бары нагрузки (правая колонка) ----------
 (function buildSensorBars() {
@@ -342,6 +395,14 @@ function connect() {
   ws.onerror = () => ws.close();
   ws.onmessage = (ev) => {
     const d = JSON.parse(ev.data);
+    if (d.type === "geometry") {
+      GEO.platform = d.platform_cm;
+      GEO.sensors = d.sensors_cm;
+      GEO.capacity = d.capacity_kg;
+      GEO.overloadFrac = d.overload_frac;
+      buildField();
+      return;
+    }
     tgt.corners = d.corners; tgt.W = d.W; tgt.copX = d.copX; tgt.copY = d.copY;
     haveData = true;
   };
@@ -423,7 +484,8 @@ function tick() {
     document.getElementById("val-copy").textContent = sgn(cur.copY);
 
     // CoP маркер в поле
-    const mx = pxX(clamp(cur.copX, -47.5, 47.5)), my = pxY(clamp(cur.copY, -47.5, 47.5));
+    const hx = GEO.platform[0] / 2, hy = GEO.platform[1] / 2;
+    const mx = pxX(clamp(cur.copX, -hx, hx)), my = pxY(clamp(cur.copY, -hy, hy));
     const vec = document.getElementById("vec"); vec.setAttribute("x2", mx); vec.setAttribute("y2", my);
     document.getElementById("cross-v").setAttribute("x1", mx);
     document.getElementById("cross-v").setAttribute("x2", mx);
@@ -434,6 +496,14 @@ function tick() {
 
     // датчики
     for (const s of SENS) setSensor(s, cur.corners[s.idx], maxLoad, W);
+
+    // перегрузка: любой датчик > overloadFrac от номинала (по сырым, не сглаженным)
+    const lim = GEO.capacity * GEO.overloadFrac;
+    const over = SENS.filter(s => tgt.corners[s.idx] > lim).map(s => s.k);
+    const chipOver = document.getElementById("chip-overload");
+    chipOver.style.display = over.length ? "flex" : "none";
+    if (over.length) document.getElementById("overload-text").textContent =
+      `ПЕРЕГРУЗ ${over.join(", ")} > ${lim.toFixed(0)} КГ`;
 
     // смещение от центра + статус
     const off = Math.hypot(cur.copX, cur.copY);

@@ -39,20 +39,10 @@ import serial
 import serial.tools.list_ports
 import websockets
 
-# ---- геометрия платформы (см), как в cop_visualizer.py ----
-SENSOR_HALF = 32.5
-DIAG_OFFSET_CM = 0.75
-_o = DIAG_OFFSET_CM / math.sqrt(2.0)
-CORNER_ORDER = ["PL", "PP", "ZL", "ZP"]
-CORNER_XY = {
-    "PL": (-SENSOR_HALF,  SENSOR_HALF), "PP": (SENSOR_HALF,  SENSOR_HALF),
-    "ZL": (-SENSOR_HALF, -SENSOR_HALF), "ZP": (SENSOR_HALF, -SENSOR_HALF),
-}
-SENSOR_OFFSET = {"PL": (+_o, +_o), "PP": (+_o, -_o), "ZL": (0.0, 0.0), "ZP": (0.0, 0.0)}
-SENSOR_POS = {
-    n: (CORNER_XY[n][0] + SENSOR_OFFSET[n][0], CORNER_XY[n][1] + SENSOR_OFFSET[n][1])
-    for n in CORNER_ORDER
-}
+# ---- геометрия платформы: единый модуль platform_geometry.py ----
+from platform_geometry import (compute_cop, geometry_dict,
+                               SUPPORT_HALF_X_CM, SUPPORT_HALF_Y_CM)
+
 
 # ---- стабильность ----
 SWAY_WIN   = 30      # окно отсчётов для оценки качания
@@ -71,16 +61,6 @@ def parse_line(line):
     if len(nums) == 7:
         return nums[0:4], nums[4], nums[5], nums[6]
     return None
-
-
-def compute_cop(corners):
-    """Центр давления = нагрузочно-взвешенное среднее позиций датчиков (см)."""
-    s = sum(corners)
-    if s <= 1e-6:
-        return 0.0, 0.0
-    cx = sum(l * SENSOR_POS[n][0] for n, l in zip(CORNER_ORDER, corners)) / s
-    cy = sum(l * SENSOR_POS[n][1] for n, l in zip(CORNER_ORDER, corners)) / s
-    return cx, cy
 
 
 class StabilityTracker:
@@ -127,6 +107,7 @@ def make_payload(corners, W, balX, balY, tracker):
     copX, copY = compute_cop(corners)
     tracker.push(copX, copY)
     return {
+        "type": "data",
         "corners": [round(c, 2) for c in corners],
         "W": round(W, 2),
         "balX": round(balX, 1), "balY": round(balY, 1),
@@ -163,19 +144,19 @@ def demo_producer(emit, stop):
     """Поток: синтетический сигнал без железа (для проверки UI)."""
     import random
     tracker = StabilityTracker()
-    H = SENSOR_HALF
+    HX, HY = SUPPORT_HALF_X_CM, SUPPORT_HALF_Y_CM
     t0 = time.time()
     print("ДЕМО-режим: синтетический поток. Открой http://localhost:%d/futuristic.html" % HTTP_PORT)
     while not stop.is_set():
         t = time.time() - t0
         # плавно гуляющий ЦД + шум качания
-        cx = 6.0 * math.sin(t * 0.7) + random.gauss(0, 0.7)
-        cy = 4.0 * math.sin(t * 0.5 + 1.0) + random.gauss(0, 0.7)
-        cx = max(-H, min(H, cx)); cy = max(-H, min(H, cy))
+        cx = 8.0 * math.sin(t * 0.7) + random.gauss(0, 0.7)
+        cy = 5.0 * math.sin(t * 0.5 + 1.0) + random.gauss(0, 0.7)
+        cx = max(-HX, min(HX, cx)); cy = max(-HY, min(HY, cy))
         W = 80.0
         # раскладка веса по углам из позиции ЦД (билинейно)
-        rf = (cx + H) / (2 * H); lf = 1 - rf
-        ff = (cy + H) / (2 * H); bf = 1 - ff
+        rf = (cx + HX) / (2 * HX); lf = 1 - rf
+        ff = (cy + HY) / (2 * HY); bf = 1 - ff
         corners = [lf * ff * W, rf * ff * W, lf * bf * W, rf * bf * W]  # PL,PP,ZL,ZP
         left, right = corners[0] + corners[2], corners[1] + corners[3]
         front, rear = corners[0] + corners[1], corners[2] + corners[3]
@@ -230,6 +211,8 @@ async def amain(args):
     threading.Thread(target=target, daemon=True).start()
 
     async def handler(ws):
+        # сначала геометрия платформы, только потом подписываем на поток данных
+        await ws.send(json.dumps(geometry_dict()))
         clients.add(ws)
         try:
             async for _ in ws:      # входящие сообщения не используем

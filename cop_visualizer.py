@@ -8,15 +8,14 @@
 где PL..ZP - нагрузка датчиков в кг, W - суммарный вес в кг,
 balX/balY - смещение в %.
 
-Геометрия (реальная платформа):
-  * платформа 0.95 x 0.95 м;
-  * 4 датчика по углам, в 15 см от краёв -> образуют квадрат 0.65 x 0.65 м,
-    то есть стоят в ±32.5 см от центра.
+Геометрия (платформа v2) - в platform_geometry.py:
+  * лист 800 x 600 мм (800 - влево/вправо, 600 - вперёд/назад);
+  * 4 датчика MH26G4MH782 (100 кг) в 35-39 мм от углов -> опоры ~73 x 53 см.
 Центр давления показывается в РЕАЛЬНЫХ сантиметрах от центра платформы.
-CoP физически не может выйти за квадрат опор (±32.5 см).
+CoP физически не может выйти за четырёхугольник опор.
 
 Показывает:
-  * контур платформы (95x95 см) и квадрат опор (65x65 см);
+  * контур платформы (80x60 см) и четырёхугольник опор;
   * красную точку центра давления в см по X (влево/вправо) и Y (назад/вперёд);
   * 4 угловых маркера в позициях датчиков, размер которых растёт с нагрузкой;
   * суммарный вес в кг, позицию CoP в см и нагрузку каждого угла.
@@ -45,51 +44,20 @@ TRAIL_LEN = 60          # длина следа точки
 ANIM_INTERVAL = 16      # мс между кадрами анимации (~60 кадров/с)
 SMOOTH = 0.35           # коэф. сглаживания 0..1: больше = отзывчивее, меньше = плавнее
 
-# --- геометрия платформы (см) ---
-PLATFORM_HALF = 47.5    # половина стороны платформы 0.95 м
-SENSOR_HALF   = 32.5    # датчики в 15 см от края: 47.5 - 15 = 32.5 см от центра
+# --- геометрия платформы (см): единый модуль platform_geometry.py ---
+from platform_geometry import (CORNER_ORDER, SENSOR_POS_CM as SENSOR_POS, compute_cop,
+                               PLATFORM_HALF_X_CM, PLATFORM_HALF_Y_CM,
+                               SUPPORT_HALF_X_CM, SUPPORT_HALF_Y_CM,
+                               SENSOR_CAPACITY_KG, OVERLOAD_FRAC)
 
-# Масштаб обзора (полуширина видимой области, см). Меньше = крупнее/виднее
-# движение точки, но края платформы обрезаются. 36 ~= квадрат опор во весь кадр.
-# Поставь больше (47.5+), чтобы видеть всю платформу, или меньше для ещё зума.
-VIEW_HALF = PLATFORM_HALF + 6   # вся платформа в кадре (как было изначально)
+# Масштаб обзора (полуразмеры видимой области, см): вся платформа + поля.
+VIEW_HALF_X = PLATFORM_HALF_X_CM + 5
+VIEW_HALF_Y = PLATFORM_HALF_Y_CM + 5
 
 # Усиление чувствительности: во сколько раз ВИЗУАЛЬНО увеличить смещение точки.
 # 1.0 = реальное положение; >1 = мелкие сдвиги видны крупнее (точка ездит шире).
 # На цифры в подписи и позиции датчиков не влияет - только на красную точку/след.
 COP_GAIN = 2.5
-
-# идеальные координаты датчиков (углов) в см: ПЛ, ПП, ЗЛ, ЗП
-CORNER_XY = {
-    "PL": (-SENSOR_HALF,  SENSOR_HALF),
-    "PP": ( SENSOR_HALF,  SENSOR_HALF),
-    "ZL": (-SENSOR_HALF, -SENSOR_HALF),
-    "ZP": ( SENSOR_HALF, -SENSOR_HALF),
-}
-CORNER_ORDER = ["PL", "PP", "ZL", "ZP"]
-
-# --- поправка на неровную установку датчиков ---
-# Датчики стоят не точно в углах. Замеры:
-#   ПЛ смещён ~0.5-1 см "влево" от диагонали ПЛ-ЗП (если смотреть из угла ПЛ)
-#      -> по осям это (+X, +Y).
-#   ПП смещён ~0.5-1 см "влево" от диагонали ПП-ЗЛ (если смотреть из угла ПП)
-#      -> по осям это (+X, -Y).
-# Смещение d см вдоль диагонали раскладывается как d/sqrt(2) по каждой оси.
-# Подправь DIAG_OFFSET_CM (0.5..1.0) и знаки, если замеришь точнее.
-DIAG_OFFSET_CM = 0.75
-_o = DIAG_OFFSET_CM / math.sqrt(2.0)
-SENSOR_OFFSET = {
-    "PL": (+_o, +_o),   # влево по диагонали ПЛ-ЗП -> вправо-вперёд
-    "PP": (+_o, -_o),   # влево по диагонали ПП-ЗЛ -> вправо-назад
-    "ZL": (0.0, 0.0),
-    "ZP": (0.0, 0.0),
-}
-# фактические координаты датчиков с учётом поправки (их и используем для CoP)
-SENSOR_POS = {
-    n: (CORNER_XY[n][0] + SENSOR_OFFSET[n][0],
-        CORNER_XY[n][1] + SENSOR_OFFSET[n][1])
-    for n in CORNER_ORDER
-}
 
 
 def pick_port():
@@ -137,26 +105,26 @@ def main():
     ser.reset_input_buffer()
 
     # --- настройка графика ---
-    lim = VIEW_HALF
-    fig, ax = plt.subplots(figsize=(6.5, 6.5))
+    fig, ax = plt.subplots(figsize=(8, 6.5))
     ax.set_title("Центр давления (CoP), см от центра платформы")
     ax.set_xlabel("X, см  (- влево ... + вправо)")
     ax.set_ylabel("Y, см  (- назад ... + вперёд)")
-    ax.set_xlim(-lim, lim)
-    ax.set_ylim(-lim, lim)
+    ax.set_xlim(-VIEW_HALF_X, VIEW_HALF_X)
+    ax.set_ylim(-VIEW_HALF_Y, VIEW_HALF_Y)
     ax.set_aspect("equal")
     ax.grid(True, alpha=0.3)
     ax.axhline(0, color="gray", lw=0.8)
     ax.axvline(0, color="gray", lw=0.8)
 
-    # контур платформы (95x95 см) и квадрат опор (65x65 см)
+    # контур платформы (80x60 см) и четырёхугольник опор по фактическим датчикам
+    pw, ph = 2 * PLATFORM_HALF_X_CM, 2 * PLATFORM_HALF_Y_CM
     ax.add_patch(patches.Rectangle(
-        (-PLATFORM_HALF, -PLATFORM_HALF), 2 * PLATFORM_HALF, 2 * PLATFORM_HALF,
-        fill=False, edgecolor="black", lw=1.5, label="платформа 95×95 см"))
-    ax.add_patch(patches.Rectangle(
-        (-SENSOR_HALF, -SENSOR_HALF), 2 * SENSOR_HALF, 2 * SENSOR_HALF,
-        fill=False, edgecolor="tab:green", lw=1.0, ls="--",
-        alpha=0.6, label="опоры 65×65 см"))
+        (-PLATFORM_HALF_X_CM, -PLATFORM_HALF_Y_CM), pw, ph,
+        fill=False, edgecolor="black", lw=1.5, label=f"платформа {pw:.0f}×{ph:.0f} см"))
+    ax.add_patch(patches.Polygon(
+        [SENSOR_POS[n] for n in ("PL", "PP", "ZP", "ZL")], closed=True,
+        fill=False, edgecolor="tab:green", lw=1.0, ls="--", alpha=0.6,
+        label=f"опоры ≈{2 * SUPPORT_HALF_X_CM:.0f}×{2 * SUPPORT_HALF_Y_CM:.0f} см"))
 
     # угловые маркеры (размер = нагрузка) + текст с кг, в фактических позициях
     corner_dots = {}
@@ -222,22 +190,18 @@ def main():
         # Центр давления = нагрузочно-взвешенное среднее ФАКТИЧЕСКИХ координат
         # датчиков. Так поправка на их неровную установку учитывается физически
         # точно (а не приближением через balX/balY).
-        load_sum = sum(corners)
-        if load_sum > 1e-6:
-            copX = sum(load * SENSOR_POS[n][0]
-                       for n, load in zip(CORNER_ORDER, corners)) / load_sum
-            copY = sum(load * SENSOR_POS[n][1]
-                       for n, load in zip(CORNER_ORDER, corners)) / load_sum
+        if sum(corners) > 1e-6:
+            copX, copY = compute_cop(corners)
         else:
             # нет поканальных данных (старый 3-значный формат) или пусто -
             # запасной путь через проценты, без поправки на позиции
-            copX = balX / 100.0 * SENSOR_HALF
-            copY = balY / 100.0 * SENSOR_HALF
+            copX = balX / 100.0 * SUPPORT_HALF_X_CM
+            copY = balY / 100.0 * SUPPORT_HALF_Y_CM
 
         # точка центра давления: визуально усиливаем смещение в COP_GAIN раз
         # (для наглядности), но держим в пределах кадра. Реальные см - в подписи.
-        dispX = max(-VIEW_HALF, min(VIEW_HALF, copX * COP_GAIN))
-        dispY = max(-VIEW_HALF, min(VIEW_HALF, copY * COP_GAIN))
+        dispX = max(-VIEW_HALF_X, min(VIEW_HALF_X, copX * COP_GAIN))
+        dispY = max(-VIEW_HALF_Y, min(VIEW_HALF_Y, copY * COP_GAIN))
         trail.append((dispX, dispY))
         trail_line.set_data([p[0] for p in trail], [p[1] for p in trail])
         dot.set_data([dispX], [dispY])
@@ -252,6 +216,10 @@ def main():
         txt = (f"W = {W:.2f} кг\n"
                f"CoP X = {copX:+.1f} см\n"
                f"CoP Y = {copY:+.1f} см")
+        over = [n for n, load in zip(CORNER_ORDER, corners)
+                if load > SENSOR_CAPACITY_KG * OVERLOAD_FRAC]
+        if over:
+            txt += "\n!! ПЕРЕГРУЗ: " + ", ".join(over)
         weight_text.set_text(txt)
 
         # печать в консоль не чаще ~2 раз в секунду и только при новых данных
